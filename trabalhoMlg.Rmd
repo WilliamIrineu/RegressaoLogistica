@@ -1,0 +1,1239 @@
+---
+title: "Untitled"
+author: "WILLIAM IRINEU"
+date: "2024-09-14"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Pacotes
+
+```{r}
+
+library(tidyverse) 
+library(MASS)
+library(car)
+library(e1071)
+library(caret)
+library(cowplot)
+library(caTools)
+library(pROC)
+library(ggcorrplot)
+library(car)
+library(lmtest)
+
+```
+
+# Definições:
+
+Sim, os modelos de longa duração ou fração de cura são tipos de modelos
+de regressão usados na análise de sobrevivência. Eles são projetados
+para lidar com situações em que uma fração dos indivíduos pode nunca
+experimentar o evento de interesse (como a cura em estudos médicos) e,
+portanto, não têm um tempo de sobrevivência observado.
+
+"taxa de churn" é frequentemente utilizada como um termo padrão. Ela
+implica diretamente uma relação de clientes perdidos em relação ao total
+de clientes inicial, independentemente de ser expressa como uma taxa ou
+como uma porcentagem.
+
+Taxa: Na demografia, para que uma quantidade seja chamada uma taxa, ela
+precisa ter um numerador que quantifica um número de eventos e um
+denominador que descreve o número de pessoas que em alguma medida podem
+ser expostas a este evento. Exemplo A taxa de cancelamento, também
+chamada de taxa de churn, seria a quantidade de clientes que cancelam
+seus contratos sobre o total de clientes em um determinado período.
+
+## Fim Definições
+
+# Legenda das Colunas:
+
+customerID: Identificação única do cliente.
+
+gender: Gênero do cliente.
+
+SeniorCitizen: Indicação se o cliente é idoso (1 para sim, 0 para não).
+
+Partner: Indicação se o cliente tem parceiro (1 para sim, 0 para não).
+
+Dependents: Indicação se o cliente tem dependentes (1 para sim, 0 para
+não).
+
+tenure: Tempo que o cliente permaneceu como cliente da empresa (em
+meses).
+
+PhoneService: Indicação se o cliente possui serviço de telefone (1 para
+sim, 0 para não).
+
+MultipleLines: Indicação se o cliente tem múltiplas linhas de telefone
+(por exemplo, celular e fixo) (Sim, Não, Sem serviço de telefone).
+
+InternetService: Tipo de serviço de internet do cliente ou se nao tem
+internet (por exemplo, DSL, fibra ótica).
+
+OnlineSecurity: Indicação se o cliente possui segurança online (Sim,
+Não, Sem serviço de internet).
+
+OnlineBackup: Indicação se o cliente possui backup online (Sim, Não, Sem
+serviço de internet).
+
+DeviceProtection: Indicação se o cliente possui proteção de dispositivo
+(Sim, Não, Sem serviço de internet).
+
+TechSupport: Indicação se o cliente possui suporte técnico (Sim, Não,
+Sem serviço de internet).
+
+StreamingTV: Indicação se o cliente possui serviço de streaming de TV
+(Sim, Não, Sem serviço de internet).
+
+StreamingMovies: Indicação se o cliente possui serviço de streaming de
+filmes (Sim, Não, Sem serviço de internet).
+
+Contract: Tipo de contrato do cliente (por exemplo, mensal, anual).
+
+PaperlessBilling: Indicação se o cliente recebe faturas em formato
+eletrônico (1 para sim, 0 para não).
+
+PaymentMethod: Método de pagamento do cliente. -Transfer
+Bank-TED-transferência eletrônica de fundos entre bancos diferentes que
+ocorre no mesmo dia útil -Debito em Conta Mailed Check-Cheque enviado
+por correio para o provedor pelo correio Cartao de credito
+
+Electronic Check é quando você fornece as informações de um cheque (como
+número da conta, número do banco, valor) para uma empresa ou indivíduo
+para que eles possam debitar o valor diretamente da sua conta bancária.
+Não é um cheque físico, mas sim uma transação eletrônica que usa os
+dados do cheque para realizar o débito. No Brasil, isso pode ser feito
+através de débito autorizado, por exemplo.
+
+MonthlyCharges: Valor da cobrança mensal do cliente.
+
+TotalCharges: Valor total cobrado ao cliente.
+
+Churn: Indicação se o cliente cancelou o serviço (1 para sim, 0 para
+não).
+
+# Lendo os dados
+
+```{r}
+library(readr)
+
+telco <- read.csv("Telecom_Churn.csv")
+glimpse(telco)
+
+```
+
+#1. Situação dos dados
+
+# Mudando Nomes Colunas
+
+```{r}
+
+# Novos nomes das colunas em português
+novos_nomes <- c("IDCliente", "Genero", "Idoso", "Parceiro", "Dependentes",
+                 "Tempo", "ServicoTelefone", "MultiplasLinhas", "ServicoInternet", 
+                 "SegurancaOnline", "BackupOnline", "ProtecaoDispositivo", 
+                 "SuporteTecnico", "StreamingTV", "StreamingFilmes", 
+                 "Contrato", "FaturamentoEletronico", "MetodoPagamento", 
+                 "CobrancaMensal", "CobrancaTotal", "Cancelamento")
+
+
+
+# Renomeando as colunas
+colnames(telco) <- novos_nomes
+
+DT::datatable(telco)
+
+
+```
+
+## Contagem de NAs
+
+```{r}
+colSums(is.na(telco))
+```
+
+## % NA nos dados
+
+Porcentagem de valores ausentes em cada variável do conjunto de dados. A
+variável "TotalCharges" tem a maior proporção de valores ausentes, cerca
+de 0,15%. Todas as outras variáveis têm uma porcentagem muito pequena de
+valores ausentes, menos de 0,01%.
+
+```{r}
+
+options(repr.plot.width = 6, repr.plot.height = 4)
+missing_data <- telco %>% summarise_all(funs(sum(is.na(.))/n()))
+missing_data <- gather(missing_data, key = "variables", value = "percent_missing")
+ggplot(missing_data, aes(x = reorder(variables, percent_missing), y = percent_missing)) +
+  geom_bar(stat = "identity", fill = "red", aes(color = I('white')), size = 0.3)+
+  xlab('variables')+
+  coord_flip()+ 
+  theme_bw()
+
+```
+
+Este gráfico mostra a porcentagem de valores ausentes em cada variável
+do conjunto de dados. A variável CobraçaTotal tem a maior proporção de
+valores ausentes, cerca de 0,15%. Todas as outras variáveis têm uma
+porcentagem muito pequena de valores ausentes, menos de 0,01%.
+
+Além disso existe 3 variaveis continuas,
+CobraçaTotal,CobraçaMensal,Tempo E Idoso. Proximo passo é limpar os NA e
+
+## Tratamento Dados
+
+Tirando as linhas que possuem os valores NA e mudando a coluna
+SeniorCitizen
+
+```{r}
+
+telco <- telco[complete.cases(telco),]
+
+telco$Idoso <- as.factor(ifelse(telco$Idoso==1, "Yes", "No"))
+colSums(is.na(telco))
+
+
+```
+
+# 3. Tratamento dos dados
+
+Inicialmente: Limpeza dados Categoricos Padronizacao dos dados Continuos
+Criação de dados derivados Criação de dados para variaveis Fator Criação
+do conjunto de dados Final Treinamento e Validação Limpeza das variaveis
+no modelo
+
+Apartir das infomações acima, existem algumas colunas que tem como
+resposta No, e Sem serviço de Internet ou Sem serviço Telefonico
+Transformaremos todas em No e limpar os dados.
+
+```{r}
+valores_unicos <- lapply(telco[, c(2:5,7:18,21)], unique)
+valores_unicos
+
+```
+
+## Tranformando em No as Variaveis
+
+```{r}
+
+telco <- data.frame(lapply(telco, function(x) {
+                  gsub("No internet service", "No", x)}))
+
+telco <- data.frame(lapply(telco, function(x) {
+                  gsub("No phone service", "No", x)}))
+
+valores_unicos <- lapply(telco[, c(2:5,7:18,21)], unique)
+valores_unicos
+head(telco)
+
+
+
+```
+
+## Grafico clientes-Sobrevivencia
+
+```{r}
+library(ggplot2)
+
+head(telco[,c(1,6,21)])
+
+telco$Tempo=as.numeric(telco$Tempo)
+
+attach(telco)
+
+ggplot(telco[1:20,], aes(x = 0, xend = Tempo, y = IDCliente, yend = IDCliente)) +geom_segment(size = 1) + # Adiciona segmentos de linha para cada cliente
+  theme(axis.text.y = element_text(angle = 0, hjust = 1)) + # Ajusta os rótulos do eixo y para melhor visualização
+  labs(x = "Tempo", y = "ID do Cliente", title = "Linha do Tempo dos Clientes-Primeiros 20 cliente") + 
+  theme_minimal()
+
+```
+
+## KM-Sobrevivencia
+
+```{r}
+attach(telco)
+library(survival)
+
+telco$Cancelamento=ifelse(telco$Cancelamento=="Yes",1,0)
+
+km_Tel <- survfit(Surv(telco$Tempo, telco$Cancelamento) ~ 1, data = telco)
+
+plot(km_Tel, main="Kaplan-Meier",
+       xlab = "Tempos", ylab = "S(t) estimada", 
+       mark.time = TRUE, col=c(4,2))
+
+
+```
+
+## Taxa Churn no Tempo
+
+```{r}
+options(repr.plot.width = 6, repr.plot.height = 4)
+
+telco %>% 
+group_by(Cancelamento) %>% 
+summarise(Count = n())%>% 
+mutate(percent = prop.table(Count)*100)%>%
+ggplot(aes(reorder(Cancelamento, -percent), percent), fill = Cancelamento)+
+geom_col(fill = c("#b0b0b0", "#E7B800"))+
+geom_text(aes(label = sprintf("%.2f%%", percent)), hjust = 0.01,vjust = -0.5, size =3)+ 
+theme_bw()+  
+xlab("Churn") + 
+ylab("Percentual")+
+ggtitle("Censura percentual 1-Sim e 0-Nao")
+
+```
+
+## Distribuicao binomial
+
+```{r}
+
+telco$Cancelamento=ifelse(telco$Cancelamento==1,"Yes","No")
+
+frequencias <- table(telco$Cancelamento)
+print(frequencias)
+
+# Calcule a proporção de "Yes"
+proporcao_sucessos <- frequencias["Yes"] / sum(frequencias)
+proporcao_sucessos <- unname(proporcao_sucessos["Yes"])
+print(proporcao_sucessos)
+
+# Frequências observadas
+observadas <- as.numeric(frequencias)
+
+# Número total de observações
+n_total <- sum(observadas)
+
+# Frequências esperadas para uma distribuição binomial
+# Vamos assumir um número de ensaios adequado (ex. n_total)
+probabilidade_sucesso <- proporcao_sucessos
+p=proporcao_sucessos
+frequencias_esperadas <- c((1 - p) * n_total, p * n_total)
+probabilidades <- c(1 - p, p)
+# Teste qui-quadrado
+teste_qui_quadrado <- chisq.test(observadas, p = probabilidades)
+
+# Resultados do teste
+print(teste_qui_quadrado)
+
+```
+
+A variável Cancelamento parece seguir uma distribuição binomial
+
+## Resumo dados
+
+```{r}
+summary(telco)
+
+```
+
+## Tempo
+
+```{r}
+
+telco=subset(telco,telco$Tempo>0)
+
+table(telco$Tempo)
+summary(telco$Tempo)
+
+
+# Frequências observadas
+frequencias_observadas <- table(telco$Tempo)
+
+# Proporções
+proporcoes <- prop.table(frequencias_observadas)*100
+
+# Criar um data frame para plotagem
+resultados <- data.frame(
+  Valor = names(frequencias_observadas),
+  Frequencia = as.numeric(frequencias_observadas),
+  Proporcao = as.numeric(proporcoes)
+)
+
+# Calcular porcentagens acumuladas
+resultados$Porcentagem_Acumulada <- cumsum(resultados$Proporcao)
+
+
+DT::datatable(resultados)
+
+boxplot(telco$Tempo, 
+        main = "Boxplot de Tempo", 
+        ylab = "Tenure", 
+        col = "lightblue", 
+        border = "blue",
+        ylim = c(0, 72))  # Define o limite do eixo y de 0 a 72
+
+seq_y <- seq(0, 72, by = 5)
+for (i in seq_y) {
+  abline(h = i, col = "gray", lty = 2)  # Adiciona linha horizontal com cor cinza e estilo pontilhado
+}
+
+summary(telco$Tempo)
+
+var(telco$Tempo)
+
+hist(telco$Tempo, main = "Histograma da Variável Tempo")
+
+
+```
+
+Metade dos contratos tem menos de 28 meses e a outra metade tem mais;
+Mediana de 29 e media de 32 meses; e em Média os dados se dispersam em
+25 meses; Max de 72; Isso sugere que há alguns valores altos que estão
+puxando a média para cima; A alta variância indica que há uma grande
+dispersão nos tempos de contrato
+
+# 2. Analise Exploratoria dos Dados
+
+## Criando Temas
+
+```{r}
+
+theme1 <- theme_bw()+theme(axis.text.x = element_text(angle = 0, hjust = 1, vjust = 0.5),legend.position="none")
+theme2 <- theme_bw()+theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),legend.position="none")
+
+
+glimpse(telco)
+
+```
+
+## % das variaveis Categoricas em relacao ao Churn
+
+```{r}
+
+options(repr.plot.width = 6, repr.plot.height = 4)
+telco %>% 
+  group_by(Cancelamento) %>% 
+  summarise(Count = n())%>% 
+  mutate(percent = prop.table(Count)*100)%>%
+  ggplot(aes(reorder(Cancelamento, -percent), percent), fill = Cancelamento)+
+  geom_col(fill = c("#FC4E07", "#E7B800"))+
+  geom_text(aes(label = sprintf("%.2f%%", percent)), hjust = 0.01,vjust = -0.5, size =3)+ 
+  theme_bw()+  
+  xlab("Cancelamento") + 
+  ylab("Percentual")+
+  ggtitle("Cancelamento Percentual")
+
+```
+
+Temos do Churn que cerca de 26% dos clientes deixaram a plataforma no
+ultimo mês.
+
+## % Churn pela Categoricas
+
+```{r}
+attach(telco)
+
+options(repr.plot.width = 12, repr.plot.height = 8)
+plot_grid(ggplot(telco, aes(x=Genero,fill=Cancelamento))+ geom_bar()+ theme1, 
+          ggplot(telco, aes(x=Idoso,fill=Cancelamento))+ geom_bar(position = 'fill')+theme1,
+          ggplot(telco, aes(x=Parceiro,fill=Cancelamento))+ geom_bar(position = 'fill')+theme1,
+          ggplot(telco, aes(x=Dependentes,fill=Cancelamento))+ geom_bar(position = 'fill')+theme1,
+          ggplot(telco, aes(x=ServicoTelefone,fill=Cancelamento))+ geom_bar(position = 'fill')+theme1,
+          ggplot(telco, aes(x=MultiplasLinhas,fill=Cancelamento))+ geom_bar(position = 'fill')+theme_bw()+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          align = "h")
+
+
+
+options(repr.plot.width = 12, repr.plot.height = 8)
+plot_grid(ggplot(telco, aes(x=ServicoInternet,fill=Cancelamento))+ geom_bar(position = 'fill')+ theme1+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)), 
+          ggplot(telco, aes(x=SegurancaOnline,fill=Cancelamento))+ geom_bar(position = 'fill')+theme1+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          ggplot(telco, aes(x=BackupOnline,fill=Cancelamento))+ geom_bar(position = 'fill')+theme1+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          ggplot(telco, aes(x=ProtecaoDispositivo,fill=Cancelamento))+ geom_bar(position = 'fill')+theme1+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          ggplot(telco, aes(x=SuporteTecnico,fill=Cancelamento))+ geom_bar(position = 'fill')+theme1+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          ggplot(telco, aes(x=StreamingTV,fill=Cancelamento))+ geom_bar(position = 'fill')+theme_bw()+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          align = "h")
+
+
+
+
+plot_grid(ggplot(telco, aes(x=StreamingFilmes,fill=Cancelamento))+ 
+          geom_bar(position = 'fill')+ theme1+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)), 
+          ggplot(telco, aes(x=Contrato,fill=Cancelamento))+ 
+          geom_bar(position = 'fill')+theme1+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          ggplot(telco, aes(x=FaturamentoEletronico,fill=Cancelamento))+ 
+          geom_bar(position = 'fill')+theme1+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          ggplot(telco, aes(x=MetodoPagamento,fill=Cancelamento))+
+          geom_bar(position = 'fill')+theme_bw()+
+          scale_x_discrete(labels = function(x) str_wrap(x, width = 10)),
+          align = "h")
+
+```
+
+## Observações para o churn no ultimo mes:
+
+-Para o sexo masculino e feminino é quase igual -É maior para os
+clientes que sao idosos -Clientes com parceiros e dependentes a taxa é
+menor -Para o tipo de serviço em que o cliente usa Fibra Otica a taxa é
+maior -Cliente que mais sairam no ultimo mes sao aqueles que nao possuem
+Segurança Online, Backup Online, Protecao de Dispositivo e Suporte
+Tecnico -Clientes que possuem o contrato mensal cancelaram mais do que
+os outros tipos de contratos -Clientes que recebem o boleto de pagamento
+online tem a taxa maior do que os que não recebem -Cliente que usam o
+debio em conta tem a maior taxa
+
+```{r}
+options(repr.plot.width =6, repr.plot.height = 2)
+ggplot(telco, aes(y= Tempo, x = "", fill = Cancelamento)) + 
+geom_boxplot()+ 
+theme_bw()+
+xlab(" ")
+
+```
+
+-O tempo mediano para quem cancelou no ultimo mes é de 10 meses
+
+```{r}
+
+telco$CobrancaMensal <- as.numeric(telco$CobrancaMensal)
+telco$CobrancaTotal <- as.numeric(telco$CobrancaTotal)
+
+
+
+ggplot(telco, aes(y= CobrancaMensal, x = "", fill = Cancelamento)) + 
+geom_boxplot()+ 
+theme_bw()+
+xlab(" ")
+```
+
+-Clientes que cancelaram possuem a mediana de pagamento de 75
+mensalmente
+
+```{r}
+ggplot(telco, aes(y= CobrancaTotal, x = "", fill = Cancelamento)) + 
+geom_boxplot()+ 
+theme_bw()+
+xlab(" ")
+```
+
+A mediana dos cutos totais dos que cancelaram no ultimo mes é
+relativamente baixa
+
+## Correlacao dos dados continuos
+
+```{r}
+
+
+options(repr.plot.width =6, repr.plot.height = 4)
+telco_cor <- round(cor(telco[,c("Tempo","CobrancaMensal","CobrancaTotal")]), 1)
+telco_cor 
+ggcorrplot(telco_cor,  title = "Correlation")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+Observe que a correlacao entre o pagamento total é positiva entre o
+tempo e os custos mensais
+
+```{r}
+
+options(repr.plot.width =4, repr.plot.height = 4)
+boxplot(telco$Tempo,xlab="Tempo")$out
+boxplot(telco$CobrancaMensal,xlab="CobrancaMental")$out
+boxplot(telco$CobrancaTotal,xlab="CobbrancaTotal")$out
+
+```
+
+Observe que nao se tem dado Outliers nas variaveis Continuas
+
+```{r}
+num_columns <- c("Tempo", "CobrancaMensal", "CobrancaTotal")
+telco[num_columns] <- sapply(telco[num_columns], as.numeric)
+
+```
+
+## Padronizacao dos dados Continuos
+
+```{r}
+num_columns <- c("Tempo", "CobrancaMensal", "CobrancaTotal")
+telco[num_columns] <- sapply(telco[num_columns], as.numeric)
+
+telco_int <- telco[,c("Tempo","CobrancaMensal", "CobrancaTotal")]
+
+head(telco_int)
+
+```
+
+## Criando Categoria Tempo
+
+```{r}
+telco <- telco %>%
+  mutate(Categoria_Tempo = cut(Tempo,
+breaks = c(0, 12, 24, 36, 48, 60, 72),
+labels = c('1 ano', '1-2 anos', '2-3 anos', '3-4 anos', '4-5 anos', '5-6 anos')))
+
+# Convertendo para fator
+telco$Categoria_Tempo <- as.factor(telco$Categoria_Tempo)
+
+
+DT::datatable(telco)
+
+```
+
+```{r}
+attach(telco)
+library(plotly)
+plot_ly(telco, labels = ~ Categoria_Tempo, type = 'pie')
+
+options(repr.plot.width =6, repr.plot.height = 3)
+ggplot(telco, aes(Categoria_Tempo, fill = Categoria_Tempo)) + geom_bar()+ theme1
+
+```
+
+Os clientes estao concentrado em duas faixa de tempo de contrato: 0 até
+1 ano e 5 a 6 anos
+
+```{r}
+attach(telco)
+library(plotly)
+plot_ly(telco, labels = ~ Contrato, type = 'pie')
+
+options(repr.plot.width =6, repr.plot.height = 3)
+ggplot(telco, aes(Contrato, fill = Contrato)) + geom_bar()+ theme1
+
+unique(Contrato)
+
+```
+
+## Criando Variaveis Indicadores para Categoricas
+
+```{r}
+
+telco_cat <- telco[,-c(1,6,19,20)]
+
+dummy<- data.frame(lapply(telco_cat, as.factor))
+
+
+```
+
+## DataFrame Final
+
+```{r}
+
+telco <- cbind(telco_int,dummy)
+telco$Cancelamento=as.factor(telco$Cancelamento)
+
+```
+
+# Treino e Teste
+
+```{r}
+
+library(caTools)
+
+set.seed(123)
+indices <- sample.split(telco$Cancelamento, SplitRatio = 0.7)
+train <- telco[indices, ]
+validation <- telco[!indices, ]
+
+
+```
+
+# Modelo 1
+
+## Melhor Familia
+
+```{r}
+
+# Modelo com função de ligação logit (regressão logística)
+model_logit <- glm(Cancelamento ~ Tempo + Idoso + MultiplasLinhas, family = binomial(link = "logit"), data = train)
+
+# Modelo com função de ligação probit
+model_probit <- glm(Cancelamento ~ Tempo + Idoso + MultiplasLinhas, family = binomial(link = "probit"), data = train)
+
+# Modelo com função de ligação cloglog
+model_cloglog <- glm(Cancelamento ~ Tempo + Idoso + MultiplasLinhas, family = binomial(link = "cloglog"), data = train)
+
+# Calcular o AIC de cada modelo
+aic_logit <- AIC(model_logit)
+aic_probit <- AIC(model_probit)
+aic_cloglog <- AIC(model_cloglog)
+
+# Exibir os valores de AIC
+aic_logit
+aic_probit
+aic_cloglog
+
+# Deviance residual dos modelos
+deviance(model_logit)
+deviance(model_probit)
+deviance(model_cloglog)
+
+
+```
+
+O modelo com a função de ligação cloglog apresentou os melhores
+resultados em quase todos os critérios de avaliação, incluindo o menor
+AIC, maior Log-Likelihood, menor Deviance, e o melhor desempenho em
+Pseudo-R².
+
+## Modelo Geral
+
+```{r}
+#Build the first model using all variables
+model_1 = glm(Cancelamento ~ ., data = train, family = binomial(link = "logit"))
+summary(model_1)
+
+```
+
+## Usando Step AIC
+
+Com o step AIC iremos escolher as melhores variaveis para o melhor
+modelo
+
+#Modelo 2
+
+```{r,include=FALSE}
+
+model_2<- stepAIC(model_1, direction="both")
+
+```
+
+## Modelo stepAIC
+
+## Resumo Modelo 2
+
+```{r}
+
+summary(model_2)
+
+model_2=glm(formula = Cancelamento ~ Tempo + CobrancaMensal + Idoso + 
+    ServicoTelefone + MultiplasLinhas + ServicoInternet + BackupOnline + 
+    ProtecaoDispositivo + StreamingTV + StreamingFilmes + Contrato + 
+    FaturamentoEletronico + MetodoPagamento + Categoria_Tempo, 
+    family = binomial(link = "logit"), data = train)
+
+
+
+```
+
+## MULTICOLINEARIDADE
+
+```{r}
+
+library(car)
+vif(model_2)
+
+```
+
+### Removendo
+
+CobrancaMensal CobrancaTotal Categoria_Tempo
+
+```{r}
+
+model_2=glm(formula = Cancelamento ~ Tempo + Idoso + 
+    ServicoTelefone + MultiplasLinhas + ServicoInternet + BackupOnline + 
+    ProtecaoDispositivo + StreamingTV + StreamingFilmes + Contrato + 
+    FaturamentoEletronico + MetodoPagamento, 
+    family = binomial(link = "logit"), data = train)
+
+library(car)
+vif(model_2)
+
+```
+
+## pacotes
+
+```{r}
+
+library(car)           # Para multicolinearidade e análises de influência
+library(ResourceSelection)  # Para teste de Hosmer-Lemeshow
+library(pscl)          # Para Pseudo-R²
+library(splines)
+
+```
+
+## Verificar independência dos observações
+
+```{r}
+
+car::durbinWatsonTest(model_2)
+
+```
+
+Como o p-valor é maior que 0.05, não temos evidências estatísticas para
+rejeitar a hipótese nula, sugerindo que não há autocorrelação
+significativa nos resíduos. Com base na estatística de Durbin-Watson e
+no p-valor, não há indícios de autocorrelação significativa nos resíduos
+do modelo. Isso sugere que os resíduos são aproximadamente
+independentes, o que é uma condição desejável para garantir a validade
+das inferências no modelo de regressão.
+
+## RESIDUOS MODELO 2
+
+### Resíduos de Pearson e Deviance
+
+```{r}
+
+pearson=residuals(model_2, type = "pearson")
+deviance=residuals(model_2, type = "deviance")
+
+
+# Crie o gráfico de resíduos de deviance
+plot(deviance, pch = 16, main = "Gráfico de Resíduos de Deviance", xlab = "Observações", ylab = "Resíduos de Deviance")
+abline(h = 0, col = "red")
+
+# Crie o gráfico de resíduos de pearson
+plot(pearson, pch = 16, main = "Gráfico de Resíduos de Pearson", xlab = "Observações", ylab = "Resíduos de Pearson")
+abline(h = 0, col = "red")
+
+
+```
+
+### Identificação de Pontos Influentes
+
+```{r}
+
+cooksD <- cooks.distance(model_2)
+summary(cooksD)
+plot(cooksD, main = "Distância de Cook", ylab = "Distância de Cook")
+abline(h = 4/(nrow(train) - length(coef(model_2))), col = "red", lty = 2)
+
+```
+
+### Leverage (hii) Plot para Detecção de Observações Alavanca
+
+```{r}
+
+leverage <- hatvalues(model_2)
+summary(leverage)
+plot(leverage, main = "Valores de Leverage (hii)", ylab = "Leverage")
+abline(h = 2 * mean(leverage), col = "red", lty = 2)
+
+
+```
+
+### Gráfico de Resíduos Padronizados
+
+```{r}
+
+plot(rstandard(model_2), main = "Resíduos Padronizados", ylab = "Resíduo Padronizado")
+abline(h = c(-2, 2), col = "red", lty = 2)
+
+
+```
+
+### Graficos Envelope
+
+```{r}
+set.seed(2000)
+require(hnp)
+
+hnp(model_2,print.on = T,pch=19,cex=1.0)
+# Observe que tem apenas um ponto fora do envelope, o modelo é bem ajustado
+
+
+```
+
+Este QQ plot indica que os resíduos do modelo seguem bem a distribuição
+teórica esperada. Isso sugere que o modelo ajustado é apropriado em
+termos de aderência dos resíduos, um bom sinal de ajuste do modelo.
+
+##Verificação Adequação Geral do modelo
+
+O teste de Hosmer-Lemeshow, que é um teste estatístico de bondade de
+ajuste aplicado em modelos de regressão logística.
+
+Hipóteses do Teste:
+
+H0 (hipótese nula): Não há diferença significativa entre os valores
+previstos pelo modelo e os valores observados. Ou seja, o modelo se
+ajusta bem aos dados.
+
+H1 (hipótese alternativa): Existe uma diferença significativa entre os
+valores previstos e observados. Portanto, o modelo não se ajusta bem aos
+dados.
+
+glmtoolbox:
+
+O glmtoolbox é uma coleção de ferramentas adicionais para modelos
+lineares generalizados (GLM), incluindo o teste de Hosmer-Lemeshow.
+
+```{r}
+
+#install.packages("glmtoolbox")
+
+library(glmtoolbox)
+hltest(model_2)
+
+```
+
+O valor p do teste de Hosmer-Lemeshow é maior que 0,05 (0.66222), o que
+significa que não há evidências estatísticas para rejeitar a hipótese
+nula de que o modelo se ajusta bem aos dados. Em outras palavras, o
+modelo apresenta um ajuste aceitável em relação à variável resposta.
+
+# Avaliado o Modelo Dados Teste
+
+## Ponto de Corte 0.5
+
+```{r}
+
+final_model=model_2
+actual_churn <- validation$Cancelamento
+
+pred <- predict(final_model, type = "response", newdata = validation[,-24])
+summary(pred)
+validation$prob <- pred
+
+# Using probability cutoff of 50%.
+
+cutoff_churn <- factor(ifelse(pred >=0.50, "Yes", "No"))
+conf_final <- caret::confusionMatrix(cutoff_churn, actual_churn, positive = "Yes")
+accuracy <- conf_final$overall[1]
+sensitivity <- conf_final$byClass[1]
+specificity <- conf_final$byClass[2]
+accuracy
+sensitivity
+specificity
+
+```
+
+Como podemos ver acima, quando usamos um corte de 0,50, obtemos uma boa
+acuracia e especificidade, mas a sensibilidade é muito menor.
+
+Portanto, precisamos encontrar o corte de probabilidade ideal que dará a
+máxima precisão, sensibilidade e especificidade
+
+## Curva ROC
+
+Biblioteca: (pROC)
+
+```{r}
+
+require(pROC)
+roc1 <- roc(validation$Cancelamento, pred)
+
+# Plote a curva ROC com as personalizações desejadas
+plot(roc1,
+     print.auc = TRUE,              # Exibe o AUC no gráfico
+     auc.polygon = TRUE,            # Preenche a área sob a curva
+     grid = c(0.1, 0.2),            # Define a densidade do grid
+     grid.col = c("green", "red"),  # Define as cores do grid
+     max.auc.polygon = TRUE,        # Preenche até o ponto máximo da curva
+     auc.polygon.col = "lightgreen",# Cor do preenchimento da área sob a curva
+     print.thres = TRUE)            # Exibe os pontos de corte no gráfico
+
+```
+
+Vamos escolher um valor de corte de 0,293 para o modelo final, onde as
+curvas de precisão, especificidade e sensibilidade se encontram e
+maximiza ambas.
+
+## Melhor Ponto de Corte
+
+```{r}
+
+# Previsões do modelo
+pred <- predict(final_model, type = "response", newdata = validation[,-24])
+validation$prob <- pred
+
+cutoff_churn <- factor(ifelse(pred >=0.293, "Yes", "No"))
+conf_final <- caret::confusionMatrix(cutoff_churn, actual_churn, positive = "Yes")
+conf_final
+accuracy <- conf_final$overall[1]
+sensitivity <- conf_final$byClass[1]
+specificity <- conf_final$byClass[2]
+accuracy
+sensitivity
+specificity
+
+```
+
+A regressão logística com valor de probabilidade de corte de 0,256 nos
+fornece melhores valores de precisão, sensibilidade e especificidade nos
+dados de validação.
+
+Acurácia (Accuracy): 74,88% isso indica a proporção de todas as
+previsões corretas feitas pelo modelo.
+
+Sensibilidade (Sensitivity):A proporção de verdadeiros positivos
+(instâncias positivas corretamente previstas) em relação a todas as
+instâncias positivas reais. Neste caso, é 77,54%.
+
+Especificidade (Specificity): A proporção de verdadeiros negativos
+(instâncias negativas corretamente previstas) em relação a todas as
+instâncias negativas reais. Neste caso, é 73,92%.
+
+```{r}
+
+valores_unicos <- lapply(train[,c(5,8,9,10,12,13,15,16,17,18,19)], unique)
+# Criação de uma tabela com as variáveis categóricas e seus níveis
+
+# Dados das variáveis categóricas e níveis
+categorias <- data.frame(
+  Variavel = c("Idoso", "ServicoTelefone", "MultiplasLinhas", "ServicoInternet",
+               "BackupOnline", "ProtecaoDispositivo", "StreamingTV", "StreamingFilmes",
+               "Contrato", "FaturamentoEletronico", "MetodoPagamento"),
+  Niveis = c("No, Yes",
+             "No, Yes",
+             "No, Yes",
+             "DSL, Fiber optic, No",
+             "No, Yes",
+             "No, Yes",
+             "No, Yes",
+             "No, Yes",
+             "Month-to-month, One year, Two year",
+             "No, Yes",
+             "Bank transfer (automatic), Credit card (automatic), Electronic check, Mailed check")
+)
+
+
+DT::datatable(categorias)
+
+```
+
+#REPRESENTACAO MATEMATICA
+
+Para representar o modelo de regressão logística com o link logit, a
+fórmula matemática para a probabilidade de cancelamento $p$ é dada por:
+
+$$
+p = \frac{1}{1 + e^{-(\beta_0 + \beta_1 X_1 + \beta_2 X_2 + \dots + \beta_n X_n)}}
+$$
+
+onde:
+
+
+\begin{itemize}
+    \item \( p \) é a probabilidade de cancelamento.
+    \item \( \beta_0 \) é o intercepto do modelo.
+    \item \( \beta_1, \beta_2, \dots, \beta_n \) são os coeficientes estimados para cada variável do modelo.
+    \item \( X_1, X_2, \dots, X_n \) são os valores das variáveis para uma nova observação.
+\end{itemize}
+
+
+## Exemplo
+
+##Cliente João tem as seguintes observações:
+
+Tempo = 10 meses
+
+Idoso = Yes
+
+ServicoTelefone = Yes
+
+MultiplasLinhas = Yes
+
+ServicoInternet = Fiber optic
+
+BackupOnline = No
+
+ProtecaoDispositivo =No
+
+StreamingTV = Yes
+
+StreamingFilmes = No
+
+Contrato = One year
+
+FaturamentoEletronico = Yes
+
+MetodoPagamento = Electronic check
+
+```{r}
+
+final_model$coefficients
+# Definindo os coeficientes do modelo
+coef <- c(
+  Intercept = -0.46557547,
+  Tempo = -0.03670718,
+  IdosoYes = 0.40057739,
+  ServicoTelefoneYes = -0.39326101,
+  MultiplasLinhasYes = 0.24896363,
+  ServicoInternetFiberOptic = 0.94164496,
+  ServicoInternetNo = -0.74263758,
+  BackupOnlineYes = -0.11692944,
+  ProtecaoDispositivoYes = -0.01721924,
+  StreamingTVYes = 0.24968637,
+  StreamingFilmesYes = 0.21495696,
+  ContratoOneYear = -0.73288236,
+  ContratoTwoYear = -1.68905812,
+  FaturamentoEletronicoYes = 0.38170335,
+  MetodoPagamentoCreditCardAutomatic = -0.03091178,
+  MetodoPagamentoElectronicCheck = 0.33622045,
+  MetodoPagamentoMailedCheck = 0.01954290
+)
+
+# Definindo os valores para o cliente João
+joao <- c(
+  1,                  # Intercept
+  10,                 # Tempo
+  1,                  # IdosoYes
+  1,                  # ServicoTelefoneYes
+  1,                  # MultiplasLinhasYes
+  1,                  # ServicoInternetFiberOptic
+  0,                  # ServicoInternetNo
+  0,                  # BackupOnlineYes (não possui backup)
+  0,                  # ProtecaoDispositivoYes (não possui proteção)
+  1,                  # StreamingTVYes
+  0,                  # StreamingFilmesYes (não possui streaming de filmes)
+  1,                  # ContratoOneYear
+  0,                  # ContratoTwoYear
+  1,                  # FaturamentoEletronicoYes
+  0,                  # MetodoPagamentoCreditCardAutomatic
+  1,                  # MetodoPagamentoElectronicCheck
+  0                   # MetodoPagamentoMailedCheck
+)
+
+# Calculando eta (soma ponderada das variáveis)
+eta <- sum(coef * joao)
+
+# Calculando a probabilidade de cancelamento
+prob_cancelamento <- 1 / (1 + exp(-eta))
+
+# Exibindo o resultado
+prob_cancelamento
+
+
+```
+
+Isso significa que, com os valores fornecidos para as variáveis (Tempo =
+10 meses, Idoso = Yes, ServicoTelefone = Yes, etc.), o modelo calcula
+que há uma chance de 64,57% de que o cliente cancele o serviço.
+
+## Coeficientes
+
+```{r}
+
+final_model$coefficients
+
+```
+
+## Exp coeficientes
+
+```{r}
+
+k=exp(final_model$coefficients)
+
+sort(k,decreasing = T)
+
+# Extraindo os coeficientes e calculando odds ratios
+coeficientes <- summary(final_model)$coefficients[, "Estimate"]
+odds_ratios <- exp(coeficientes)
+
+# Calculando os intervalos de confiança para os odds ratios
+IC <- confint(final_model)
+IC_odds_ratios <- exp(IC)
+
+# Criando uma lista completa de categorias de referência
+# Inclui NA para variáveis contínuas e o intercepto
+categorias_referencia_completo <- c(NA, sapply(final_model$xlevels, function(x) x[1]))
+categorias_referencia_completo <- categorias_referencia_completo[1:length(coeficientes)]  # Ajustando o comprimento
+
+# Criando uma tabela com as informações desejadas
+tabela_resultados <- data.frame(
+  Variavel = names(coeficientes),
+  Coeficiente = coeficientes,
+  Categoria_Referencia = categorias_referencia_completo,
+  Odds_Ratio = odds_ratios,
+  IC_Odds_Ratio_2.5 = IC_odds_ratios[, 1],
+  IC_Odds_Ratio_97.5 = IC_odds_ratios[, 2]
+)
+
+# Exibindo a tabela
+DT::datatable(tabela_resultados)
+
+
+```
+
+## Tabela Odds
+
+```{r}
+
+# Calculando os coeficientes (betas)
+betas <- final_model$coefficients
+
+# Calculando os intervalos de confiança dos betas (95% IC)
+IC_betas <- confint(final_model)
+
+# Calculando as razões de chances (odds ratios)
+odds_ratios <- exp(betas)
+
+# Calculando os intervalos de confiança das odds ratios
+IC_odds_ratios <- exp(IC_betas)
+
+# Calculando o percentual associado aos odds ratios
+percentual_odds <- (odds_ratios - 1) * 100  # Converte para aumento ou redução percentual
+
+# Criando uma tabela com as interpretações
+tabela_final <- data.frame(
+  Variavel = names(betas),
+  Beta = betas,
+  IC_2.5 = IC_betas[, 1],
+  IC_97.5 = IC_betas[, 2],
+  Odds_Ratio = odds_ratios,
+  IC_Odds_2.5 = IC_odds_ratios[, 1],
+  IC_Odds_97.5 = IC_odds_ratios[, 2],
+  Percentual = percentual_odds  # Coluna com o percentual
+)
+
+# Visualizando a tabela final com os percentuais
+DT::datatable(tabela_final)
+
+# Gera gráfico para visualização dos Odds Ratios com ggplot2
+library(ggplot2)
+
+# Classificação das covariáveis
+tabela_final$Categoria <- ifelse(
+  tabela_final$IC_Odds_97.5 < 1, "Protetoras",
+  ifelse(tabela_final$IC_Odds_2.5 > 1, "Risco", "Irrelevantes")
+)
+
+# Gera gráfico com ponto para Odds Ratio e barra de erro para o intervalo de confiança
+ggplot(tabela_final, aes(x = reorder(Variavel, Odds_Ratio), y = Odds_Ratio, color = Categoria)) +
+  geom_point(size = 4) +  # Bolinha colorida para o Odds Ratio
+  geom_errorbar(aes(ymin = IC_Odds_2.5, ymax = IC_Odds_97.5), width = 0.2, color = "black") +  # Barra de erro para IC
+  coord_flip() +  # Inverte os eixos para melhor visualização
+  geom_hline(yintercept = 1, linetype = "dashed", color = "black") +  # Linha de referência em 1
+  geom_text(aes(label = paste0("OR=", round(Odds_Ratio, 2), " (", round(IC_Odds_2.5, 2), "-", round(IC_Odds_97.5, 2), ")\n", round(Percentual, 1), "%")), 
+            hjust = -0.1, size = 3.5, color = "black", position = position_dodge(width = 0.9)) +
+  scale_color_manual(values = c("Protetoras" = "blue", "Irrelevantes" = "gray", "Risco" = "red")) +  # Define as cores
+  labs(title = "Razoes de Chances (Odds Ratios) e Intervalos de Confianca",
+       x = "Variavel",
+       y = "Odds Ratio") +
+  theme_minimal() +
+  theme(legend.title = element_blank())  # Remove título da legenda
+
+
+```
+
+# Interpretação dos Coeficientes
+
+Os odds ratios acima de 1 indicam que as variáveis associadas aumentam
+as chances de cancelamento (aumenta em . Exemplo
+
+Os odds ratios abaixo de 1 indicam uma redução nas chances de
+cancelamento.
+
+Resumindo: ( Exp(Coeficientes) -1 )\*100) Se for negativo reduz,se for
+positivo aumenta.
+
+Interpretação dos Coeficientes Exponenciados Intercepto (0.5054):
+
+Quando todas as variáveis estão nas suas categorias de referência, as
+chances de cancelamento são aproximadamente 49,46% menores em relação às
+chances de não cancelamento.
+
+ServicoInternet (Fiber optic) (2.0516):
+
+Clientes com serviço de internet via fibra óptica têm uma chance de
+cancelamento aproximadamente 105,16% maior em comparação aos clientes
+que utilizam a categoria de referência (DSL), mantendo todas as outras
+variáveis constantes.
