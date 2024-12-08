@@ -26,6 +26,7 @@ library(pROC)
 library(ggcorrplot)
 library(car)
 library(lmtest)
+library(xtable) 
 
 ```
 
@@ -322,6 +323,7 @@ teste_qui_quadrado <- chisq.test(observadas, p = probabilidades)
 # Resultados do teste
 print(teste_qui_quadrado)
 
+
 ```
 
 A variável Cancelamento parece seguir uma distribuição binomial
@@ -614,7 +616,7 @@ unique(Contrato)
 
 ```{r}
 
-telco_cat <- telco[,-c(1,6,19,20)]
+telco_cat <- telco[,-c(6,19,20)]
 
 dummy<- data.frame(lapply(telco_cat, as.factor))
 
@@ -634,6 +636,8 @@ telco$Cancelamento=as.factor(telco$Cancelamento)
 
 ```{r}
 
+telco$Cancelamento=as.factor(telco$Cancelamento)
+
 library(caTools)
 
 set.seed(123)
@@ -642,52 +646,20 @@ train <- telco[indices, ]
 validation <- telco[!indices, ]
 
 
+train=train[,-4]
+validation=validation[,-4]
+
 ```
 
 # Modelo 1
 
-## Melhor Familia
-
-```{r}
-
-# Modelo com função de ligação logit (regressão logística)
-model_logit <- glm(Cancelamento ~ Tempo + Idoso + MultiplasLinhas, family = binomial(link = "logit"), data = train)
-
-# Modelo com função de ligação probit
-model_probit <- glm(Cancelamento ~ Tempo + Idoso + MultiplasLinhas, family = binomial(link = "probit"), data = train)
-
-# Modelo com função de ligação cloglog
-model_cloglog <- glm(Cancelamento ~ Tempo + Idoso + MultiplasLinhas, family = binomial(link = "cloglog"), data = train)
-
-# Calcular o AIC de cada modelo
-aic_logit <- AIC(model_logit)
-aic_probit <- AIC(model_probit)
-aic_cloglog <- AIC(model_cloglog)
-
-# Exibir os valores de AIC
-aic_logit
-aic_probit
-aic_cloglog
-
-# Deviance residual dos modelos
-deviance(model_logit)
-deviance(model_probit)
-deviance(model_cloglog)
-
-
-```
-
-O modelo com a função de ligação cloglog apresentou os melhores
-resultados em quase todos os critérios de avaliação, incluindo o menor
-AIC, maior Log-Likelihood, menor Deviance, e o melhor desempenho em
-Pseudo-R².
-
 ## Modelo Geral
 
 ```{r}
-#Build the first model using all variables
-model_1 = glm(Cancelamento ~ ., data = train, family = binomial(link = "logit"))
-summary(model_1)
+
+
+model_1 = glm(train$Cancelamento ~ ., data = train, family = binomial(link = "logit"))
+
 
 ```
 
@@ -710,14 +682,13 @@ model_2<- stepAIC(model_1, direction="both")
 
 ```{r}
 
-summary(model_2)
-
 model_2=glm(formula = Cancelamento ~ Tempo + CobrancaMensal + Idoso + 
     ServicoTelefone + MultiplasLinhas + ServicoInternet + BackupOnline + 
     ProtecaoDispositivo + StreamingTV + StreamingFilmes + Contrato + 
     FaturamentoEletronico + MetodoPagamento + Categoria_Tempo, 
     family = binomial(link = "logit"), data = train)
 
+summary( model_2)
 
 
 ```
@@ -940,6 +911,8 @@ maximiza ambas.
 
 ```{r}
 
+actual_churn <- validation$Cancelamento
+
 # Previsões do modelo
 pred <- predict(final_model, type = "response", newdata = validation[,-24])
 validation$prob <- pred
@@ -953,6 +926,7 @@ specificity <- conf_final$byClass[2]
 accuracy
 sensitivity
 specificity
+
 
 ```
 
@@ -1237,3 +1211,35 @@ Clientes com serviço de internet via fibra óptica têm uma chance de
 cancelamento aproximadamente 105,16% maior em comparação aos clientes
 que utilizam a categoria de referência (DSL), mantendo todas as outras
 variáveis constantes.
+
+
+
+# exportando telco
+```{r}
+
+
+
+
+actual_churn <- telco$Cancelamento
+# Previsões do modelo
+pred <- predict(final_model, type = "response", newdata =telco)
+telco$prob <- pred
+
+cutoff_churn <- factor(ifelse(pred >=0.293, "Yes", "No"))
+conf_final <- caret::confusionMatrix(cutoff_churn, actual_churn, positive = "Yes")
+conf_final
+accuracy <- conf_final$overall[1]
+sensitivity <- conf_final$byClass[1]
+specificity <- conf_final$byClass[2]
+
+
+
+# Carregar o pacote openxlsx
+library(openxlsx)
+
+# Escrever o dataframe para um arquivo Excel
+write.xlsx(telco, file = "telcoProbabilidades.xlsx", rowNames = FALSE)
+
+
+```
+
